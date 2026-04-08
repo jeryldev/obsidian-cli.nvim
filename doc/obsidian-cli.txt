@@ -1,0 +1,120 @@
+*obsidian-cli.txt*  Thin Neovim wrapper for the official Obsidian CLI
+
+==============================================================================
+CONTENTS                                                  *obsidian-cli-contents*
+
+  1. Introduction ............................. |obsidian-cli-intro|
+  2. Requirements ............................. |obsidian-cli-requirements|
+  3. Setup .................................... |obsidian-cli-setup|
+  4. Commands ................................. |obsidian-cli-commands|
+  5. Keymaps .................................. |obsidian-cli-keymaps|
+  6. Health ................................... |obsidian-cli-health|
+
+==============================================================================
+1. INTRODUCTION                                              *obsidian-cli-intro*
+
+obsidian-cli.nvim is a thin Neovim wrapper for the official Obsidian CLI.
+It drives the live Obsidian app via shell-out commands rather than
+reimplementing vault parsing in Lua.
+
+Status: v0.0.1 — early version. APIs may change before v0.1.0.
+
+==============================================================================
+2. REQUIREMENTS                                       *obsidian-cli-requirements*
+
+  - Obsidian desktop app, version 1.12.0 or later
+  - Obsidian CLI enabled in Settings -> General -> Command line interface
+  - Obsidian app must be RUNNING when commands are invoked
+  - Neovim 0.10 or later
+
+==============================================================================
+3. SETUP                                                     *obsidian-cli-setup*
+
+>lua
+    require("obsidian-cli").setup({
+      binary = "obsidian",
+      vault = nil,
+      vault_path = nil,
+      picker = nil,
+      keymaps = true,
+      buffer_options = {
+        wrap = true,
+        linebreak = true,
+        breakindent = true,
+        colorcolumn = "80",
+        spell = true,
+        conceallevel = 2,
+      },
+    })
+<
+
+==============================================================================
+4. COMMANDS                                               *obsidian-cli-commands*
+
+                                                                *:ObsidianToday*
+:ObsidianToday          Open today's daily note in Neovim.
+
+                                                                 *:ObsidianTask*
+:ObsidianTask {text}    Append "- [ ] {text}" to today's daily note.
+
+                                                                 *:ObsidianTodo*
+:ObsidianTodo {text}    Alias of |:ObsidianTask|.
+
+                                                               *:ObsidianAppend*
+:ObsidianAppend {text}  Append plain {text} to today's daily note.
+
+                                                           *:ObsidianTasksToday*
+:ObsidianTasksToday     Show today's incomplete tasks in a picker.
+
+                                                                  *:ObsidianNew*
+:ObsidianNew {title}    Create a new note named {title}.
+
+                                                              *:ObsidianNewFrom*
+:ObsidianNewFrom {template} {title}
+                        Create a new note from a template.
+
+                                                                 *:ObsidianFind*
+:ObsidianFind           Pick a note from the vault.
+
+                                                               *:ObsidianRecent*
+:ObsidianRecent         Pick from recently modified notes.
+
+                                                               *:ObsidianSearch*
+:ObsidianSearch {query} Full-text search the vault.
+
+                                                            *:ObsidianBacklinks*
+:ObsidianBacklinks      Show backlinks for the current note.
+
+                                                           *:ObsidianUnresolved*
+:ObsidianUnresolved     List unresolved [[wiki]] links in the vault.
+
+==============================================================================
+5. KEYMAPS                                                 *obsidian-cli-keymaps*
+
+Global ~
+
+  <leader>ot   :ObsidianToday
+  <leader>oT   :ObsidianTask
+  <leader>oa   :ObsidianAppend
+  <leader>on   :ObsidianNew
+  <leader>oN   :ObsidianNewFrom
+  <leader>of   :ObsidianFind
+  <leader>or   :ObsidianRecent
+  <leader>os   :ObsidianSearch
+  <leader>ox   :ObsidianTasksToday
+  <leader>ou   :ObsidianUnresolved
+
+Buffer-local (vault markdown only) ~
+
+  <leader>ob   :ObsidianBacklinks
+
+Set `keymaps = false` in setup() to opt out and wire your own.
+
+==============================================================================
+6. HEALTH                                                   *obsidian-cli-health*
+
+Run >
+    :checkhealth obsidian-cli
+< to verify the binary, the running app, and vault auto-detection.
+
+vim:tw=78:ts=8:ft=help:norl:
