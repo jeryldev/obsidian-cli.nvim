@@ -90,18 +90,37 @@ local function cmd_tasks_today()
   pickers.pick(items, { title = "Obsidian: today's tasks" })
 end
 
+local function open_new_note(name, title)
+  local vp = vault_path_or_error(name)
+  if not vp then
+    return
+  end
+  local fname = title
+  if not fname:lower():match("%.md$") then
+    fname = fname .. ".md"
+  end
+  local abs = util.absolute(fname, vp)
+  if abs and vim.fn.filereadable(abs) == 1 then
+    vim.cmd.edit(vim.fn.fnameescape(abs))
+  else
+    -- Created in a non-default folder or with a different name; fall back to picker.
+    notify_info(name .. ": created `" .. title .. "` (use :ObsidianFind to open)")
+  end
+end
+
 local function cmd_new(opts)
   local title = opts.args
   if title == "" then
     notify_error("ObsidianNew", "title required")
     return
   end
-  local _, err = cli.run({ "create", "name=" .. title, "open" })
+  local _, err = cli.run({ "create", "name=" .. title })
   if err then
     notify_error("ObsidianNew", err)
     return
   end
   notify_info("Created: " .. title)
+  open_new_note("ObsidianNew", title)
 end
 
 local function cmd_new_from(opts)
@@ -112,12 +131,13 @@ local function cmd_new_from(opts)
   end
   local template = table.remove(args, 1)
   local title = table.concat(args, " ")
-  local _, err = cli.run({ "create", "name=" .. title, "template=" .. template, "open" })
+  local _, err = cli.run({ "create", "name=" .. title, "template=" .. template })
   if err then
     notify_error("ObsidianNewFrom", err)
     return
   end
   notify_info("Created from " .. template .. ": " .. title)
+  open_new_note("ObsidianNewFrom", title)
 end
 
 local function list_files()
