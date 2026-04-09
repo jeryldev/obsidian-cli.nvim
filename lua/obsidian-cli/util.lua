@@ -12,7 +12,18 @@ function M.expand(path)
 end
 
 function M.is_absolute(path)
-  return path:sub(1, 1) == "/"
+  if not path or path == "" then
+    return false
+  end
+  -- Unix-style absolute: /foo/bar
+  if path:sub(1, 1) == "/" then
+    return true
+  end
+  -- Windows-style absolute: C:\foo or C:/foo
+  if path:match("^%a:[/\\]") then
+    return true
+  end
+  return false
 end
 
 function M.absolute(relpath, vault_path)
@@ -54,7 +65,14 @@ function M.split_lines(s)
   if not s or s == "" then
     return {}
   end
-  return vim.split(vim.trim(s), "\n", { trimempty = true })
+  local result = {}
+  for line in s:gmatch("[^\n]+") do
+    local trimmed = vim.trim(line)
+    if trimmed ~= "" then
+      table.insert(result, trimmed)
+    end
+  end
+  return result
 end
 
 return M

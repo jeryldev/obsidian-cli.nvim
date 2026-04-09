@@ -17,6 +17,29 @@ local function build_cmd(args)
   return cmd
 end
 
+-- The Obsidian CLI sometimes reports errors on stdout with exit code 0
+-- (e.g. when the app is running but no vault is loaded). We have to detect
+-- these by string-matching known sentinels in the output.
+local ERROR_PATTERNS = {
+  "^Vault not found%.",
+  "^The CLI is unable to find Obsidian%.",
+  "^Error: ",
+  "^error: ",
+}
+
+local function looks_like_error(text)
+  if not text or text == "" then
+    return nil
+  end
+  local trimmed = vim.trim(text)
+  for _, pat in ipairs(ERROR_PATTERNS) do
+    if trimmed:match(pat) then
+      return trimmed
+    end
+  end
+  return nil
+end
+
 function M.run(args)
   local cmd = build_cmd(args)
   local ok, result = pcall(function()
@@ -36,6 +59,15 @@ function M.run(args)
     end
     return nil, msg
   end
+  -- Even with exit code 0, the CLI may have written an error to stdout.
+  local stderr_err = looks_like_error(result.stderr)
+  if stderr_err then
+    return nil, stderr_err
+  end
+  local stdout_err = looks_like_error(result.stdout)
+  if stdout_err then
+    return nil, stdout_err
+  end
   return result.stdout or "", nil
 end
 
@@ -46,7 +78,12 @@ function M.run_json(args)
   end
   out = vim.trim(out)
   if out == "" then
-    return nil, "empty response from obsidian cli"
+    return {}, nil
+  end
+  -- The CLI returns plain-text "No X found." messages instead of empty JSON
+  -- when a query has zero results. Treat these as an empty result, not an error.
+  if out:match("^No .* found%.?$") then
+    return {}, nil
   end
   local ok, decoded = pcall(vim.json.decode, out)
   if not ok then
