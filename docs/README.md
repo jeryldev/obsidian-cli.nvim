@@ -12,6 +12,7 @@ In-depth reference for users and contributors.
 ## For contributors
 
 - **[architecture.md](architecture.md)** — module breakdown, design decisions, CLI quirks the wrapper handles
+- **[testing.md](testing.md)** — writing and running the 122 plenary tests
 
 ## Quick links
 

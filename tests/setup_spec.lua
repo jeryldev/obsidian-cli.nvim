@@ -91,6 +91,30 @@ describe("obsidian-cli setup()", function()
     end
   end)
 
+  it("registers v0.0.5 navigation, CRUD, tags, and template commands", function()
+    require("obsidian-cli").setup({})
+    local expected = {
+      "ObsidianYesterday",
+      "ObsidianTomorrow",
+      "ObsidianOutline",
+      "ObsidianLinks",
+      "ObsidianOrphans",
+      "ObsidianDeadends",
+      "ObsidianTags",
+      "ObsidianTag",
+      "ObsidianRename",
+      "ObsidianMove",
+      "ObsidianDelete",
+      "ObsidianOpenInApp",
+      "ObsidianTemplates",
+      "ObsidianTemplateInsert",
+      "ObsidianFollowLink",
+    }
+    for _, name in ipairs(expected) do
+      assert.equals(2, vim.fn.exists(":" .. name), "command not registered: " .. name)
+    end
+  end)
+
   it("registers global keymaps when keymaps = true", function()
     require("obsidian-cli").setup({ keymaps = true })
     local ot = vim.fn.maparg("<leader>ot", "n")

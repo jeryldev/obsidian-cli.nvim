@@ -34,6 +34,15 @@ local function notify_info(msg)
   vim.notify(msg, vim.log.levels.INFO)
 end
 
+-- Returns true if the plain-text CLI output matches a "No X found." pattern,
+-- which the CLI uses for empty results on commands that don't return JSON.
+local function is_empty_text_result(text)
+  if not text or text == "" then
+    return true
+  end
+  return vim.trim(text):match("^No .* found") ~= nil
+end
+
 local function vault_path_or_error(name)
   local vp, err = cli.vault_path()
   if not vp then
@@ -88,19 +97,96 @@ local function find_today_buffer()
 end
 
 local function cmd_today()
-  -- Prefer switching to today's note if it's already loaded in a buffer.
-  -- Falls back to :edit for the resolved absolute path.
-  local buf = find_today_buffer()
-  if buf then
-    vim.api.nvim_set_current_buf(buf)
-    return
-  end
+  -- find_today_buffer already calls daily:path internally. Reuse its
+  -- CLI result so we don't issue the same blocking call twice on a
+  -- cold buffer (the plugin's most-used command).
   local out, err = cli.run({ "daily:path" })
   if err then
     notify_error("ObsidianToday", err)
     return
   end
-  open_relative("ObsidianToday", out)
+  local rel = vim.trim(out)
+  if rel == "" then
+    notify_error("ObsidianToday", "empty daily:path response")
+    return
+  end
+  local vp = cli.vault_path()
+  if vp then
+    local abs = util.absolute(rel, vp)
+    if abs then
+      for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(bufnr) and vim.api.nvim_buf_get_name(bufnr) == abs then
+          vim.api.nvim_set_current_buf(bufnr)
+          return
+        end
+      end
+    end
+  end
+  open_relative("ObsidianToday", rel)
+end
+
+-- Compute a daily note path for a date offset from today (e.g. -1 for
+-- yesterday, +1 for tomorrow). Uses today's daily note path as a
+-- template — replaces the date portion with the offset date's value.
+local function daily_note_for_offset(offset)
+  -- Get today's path to learn the date format + folder structure.
+  local out, err = cli.run({ "daily:path" })
+  if err then
+    return nil, err
+  end
+  local today_rel = vim.trim(out)
+  if today_rel == "" then
+    return nil, "empty daily:path response"
+  end
+  -- The daily note filename is the date — extract it, apply the offset,
+  -- and rebuild the path. We detect the date format by pattern-matching
+  -- common formats that Obsidian supports (YYYY-MM-DD is the default).
+  local today = os.date("*t")
+  local target = os.date("*t", os.time({
+    year = today.year,
+    month = today.month,
+    day = today.day + offset,
+    hour = 12,
+  }))
+  -- Replace the date string in the path. Try multiple formats that
+  -- Obsidian users commonly configure.
+  local today_str = os.date("%Y-%m-%d")
+  local target_str = os.date("%Y-%m-%d", os.time(target))
+  -- vim.pesc escapes Lua pattern metacharacters — critically, the `-` in
+  -- date strings like `2026-04-09` which Lua's gsub treats as a lazy
+  -- quantifier rather than a literal hyphen.
+  local target_rel = today_rel:gsub(vim.pesc(today_str), target_str, 1)
+  if target_rel == today_rel and offset ~= 0 then
+    local formats = { "%Y/%m/%d", "%d-%m-%Y", "%m-%d-%Y", "%Y%m%d" }
+    for _, fmt in ipairs(formats) do
+      local ts = os.date(fmt)
+      local tt = os.date(fmt, os.time(target))
+      local replaced = today_rel:gsub(vim.pesc(ts), tt, 1)
+      if replaced ~= today_rel then
+        target_rel = replaced
+        break
+      end
+    end
+  end
+  return target_rel, nil
+end
+
+local function cmd_yesterday()
+  local rel, err = daily_note_for_offset(-1)
+  if err then
+    notify_error("ObsidianYesterday", err)
+    return
+  end
+  open_relative("ObsidianYesterday", rel)
+end
+
+local function cmd_tomorrow()
+  local rel, err = daily_note_for_offset(1)
+  if err then
+    notify_error("ObsidianTomorrow", err)
+    return
+  end
+  open_relative("ObsidianTomorrow", rel)
 end
 
 local function append_daily(name, content)
@@ -434,6 +520,412 @@ local function cmd_resolve_link()
   open_new_note("ObsidianResolveLink", target)
 end
 
+-- ============================================================================
+-- Navigation & link auditing
+-- ============================================================================
+
+-- Show headings of the current file as a picker. Selecting a heading
+-- jumps the cursor to that line.
+local function cmd_outline()
+  local current = vim.api.nvim_buf_get_name(0)
+  if current == "" then
+    notify_error("ObsidianOutline", "no current file")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianOutline")
+  if not vp then
+    return
+  end
+  local rel = util.relative_to_vault(current, vp)
+  local data, err = cli.run_json({ "outline", "path=" .. rel, "format=json" })
+  if err then
+    notify_error("ObsidianOutline", err)
+    return
+  end
+  local items = {}
+  if type(data) == "table" then
+    for _, entry in ipairs(data) do
+      local heading = entry.heading or entry.text or entry.title or ""
+      local level = entry.level or entry.depth or 1
+      local indent = string.rep("  ", tonumber(level) - 1)
+      table.insert(items, {
+        path = current,
+        lnum = tonumber(entry.line or entry.position or entry.pos) or 1,
+        text = indent .. heading,
+        display = indent .. heading,
+      })
+    end
+  end
+  if #items == 0 then
+    notify_info("ObsidianOutline: no headings in this file")
+    return
+  end
+  pickers.pick(items, { title = "Obsidian: outline" })
+end
+
+-- Show outgoing links from the current file.
+local function cmd_links()
+  local current = vim.api.nvim_buf_get_name(0)
+  if current == "" then
+    notify_error("ObsidianLinks", "no current file")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianLinks")
+  if not vp then
+    return
+  end
+  local rel = util.relative_to_vault(current, vp)
+  local out, err = cli.run({ "links", "path=" .. rel })
+  if err then
+    notify_error("ObsidianLinks", err)
+    return
+  end
+  if is_empty_text_result(out) then
+    notify_info("ObsidianLinks: no outgoing links in this file")
+    return
+  end
+  local lines = util.split_lines(out)
+  local items = {}
+  for _, link_target in ipairs(lines) do
+    local abs = util.absolute(link_target, vp) or link_target
+    table.insert(items, { path = abs, display = link_target })
+  end
+  pickers.pick(items, { title = "Obsidian: outgoing links" })
+end
+
+-- List files with no incoming links (orphans — nothing links TO them).
+local function cmd_orphans()
+  local out, err = cli.run({ "orphans" })
+  if err then
+    notify_error("ObsidianOrphans", err)
+    return
+  end
+  if is_empty_text_result(out) then
+    notify_info("ObsidianOrphans: no orphan files")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianOrphans")
+  if not vp then
+    return
+  end
+  local lines = util.split_lines(out)
+  local items = {}
+  for _, rel in ipairs(lines) do
+    table.insert(items, { path = util.absolute(rel, vp) or rel, display = rel })
+  end
+  pickers.pick(items, { title = "Obsidian: orphans (no incoming links)" })
+end
+
+-- List files with no outgoing links (deadends — they don't link TO anything).
+local function cmd_deadends()
+  local out, err = cli.run({ "deadends" })
+  if err then
+    notify_error("ObsidianDeadends", err)
+    return
+  end
+  if is_empty_text_result(out) then
+    notify_info("ObsidianDeadends: no dead-end files")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianDeadends")
+  if not vp then
+    return
+  end
+  local lines = util.split_lines(out)
+  local items = {}
+  for _, rel in ipairs(lines) do
+    table.insert(items, { path = util.absolute(rel, vp) or rel, display = rel })
+  end
+  pickers.pick(items, { title = "Obsidian: dead-ends (no outgoing links)" })
+end
+
+-- Tag browser — list all tags with occurrence counts, select to see notes.
+local function cmd_tags()
+  local data, err = cli.run_json({ "tags", "counts", "format=json" })
+  if err then
+    notify_error("ObsidianTags", err)
+    return
+  end
+  if type(data) ~= "table" or #data == 0 then
+    notify_info("ObsidianTags: no tags in vault")
+    return
+  end
+  local items = {}
+  for _, entry in ipairs(data) do
+    local tag = entry.tag or entry.name or entry.text or tostring(entry)
+    local count = entry.count or entry.total or ""
+    table.insert(items, {
+      tag_name = tag,
+      text = tag .. (count ~= "" and (" (" .. count .. ")") or ""),
+      display = tag .. (count ~= "" and (" (" .. count .. ")") or ""),
+    })
+  end
+  pickers.select(items, {
+    prompt = "Obsidian tags:",
+    format_item = function(item)
+      return item.display
+    end,
+  }, function(choice)
+    if not choice then
+      return
+    end
+    -- Show notes containing the selected tag.
+    local tag_out, tag_err = cli.run({ "tag", "name=" .. choice.tag_name, "verbose" })
+    if tag_err then
+      notify_error("ObsidianTags", tag_err)
+      return
+    end
+    if is_empty_text_result(tag_out) then
+      notify_info("No notes found with tag #" .. choice.tag_name)
+      return
+    end
+    local vp = vault_path_or_error("ObsidianTags")
+    if not vp then
+      return
+    end
+    local tag_lines = util.split_lines(tag_out)
+    local tag_items = {}
+    for _, rel in ipairs(tag_lines) do
+      -- Tag verbose output may include counts; strip trailing numbers.
+      local clean = rel:match("^(.-)%s+%d+$") or rel
+      clean = vim.trim(clean)
+      if clean ~= "" and not clean:match("^%d+$") then
+        table.insert(tag_items, {
+          path = util.absolute(clean, vp) or clean,
+          display = clean,
+        })
+      end
+    end
+    pickers.pick(tag_items, { title = "Obsidian: #" .. choice.tag_name })
+  end)
+end
+
+-- Show notes containing a specific tag directly (no two-step picker).
+local function cmd_tag(opts)
+  local name = vim.trim(opts.args or "")
+  if name == "" then
+    notify_error("ObsidianTag", "tag name required (e.g. :ObsidianTag project)")
+    return
+  end
+  -- Strip leading # if user included it.
+  name = name:gsub("^#", "")
+  local out, err = cli.run({ "tag", "name=" .. name, "verbose" })
+  if err then
+    notify_error("ObsidianTag", err)
+    return
+  end
+  if is_empty_text_result(out) then
+    notify_info("No notes found with tag #" .. name)
+    return
+  end
+  local vp = vault_path_or_error("ObsidianTag")
+  if not vp then
+    return
+  end
+  local lines = util.split_lines(out)
+  local items = {}
+  for _, rel in ipairs(lines) do
+    local clean = rel:match("^(.-)%s+%d+$") or rel
+    clean = vim.trim(clean)
+    if clean ~= "" and not clean:match("^%d+$") then
+      table.insert(items, {
+        path = util.absolute(clean, vp) or clean,
+        display = clean,
+      })
+    end
+  end
+  pickers.pick(items, { title = "Obsidian: #" .. name })
+end
+
+-- ============================================================================
+-- File CRUD — destructive operations with confirmations
+-- ============================================================================
+
+local function cmd_rename(opts)
+  local current = vim.api.nvim_buf_get_name(0)
+  if current == "" then
+    notify_error("ObsidianRename", "no current file")
+    return
+  end
+  local new_name = vim.trim(opts.args or "")
+  if new_name == "" then
+    notify_error("ObsidianRename", "new name required (e.g. :ObsidianRename my-better-name)")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianRename")
+  if not vp then
+    return
+  end
+  local rel = util.relative_to_vault(current, vp)
+  local new_filename = new_name
+  if not new_filename:match("%.md$") then
+    new_filename = new_filename .. ".md"
+  end
+  -- Check if the target name already exists in the vault to prevent
+  -- accidental overwrites. Renaming to an existing file is almost always
+  -- a mistake — if the user genuinely wants to overwrite, they should
+  -- delete the target first.
+  local new_abs_check = util.absolute(new_filename, vp)
+  if new_abs_check and vim.fn.filereadable(new_abs_check) == 1 then
+    notify_error("ObsidianRename", "A file named `" .. new_filename .. "` already exists. Delete it first if you want to overwrite.")
+    return
+  end
+  if not confirm_destructive("Rename `" .. rel .. "` to `" .. new_filename .. "`?") then
+    notify_info("Cancelled: rename")
+    return
+  end
+  local old_buf = vim.api.nvim_get_current_buf()
+  local _, err = cli.run({ "rename", "path=" .. rel, "name=" .. new_name })
+  if err then
+    notify_error("ObsidianRename", err)
+    return
+  end
+  local new_abs = util.absolute(new_filename, vp) or new_filename
+  vim.cmd.edit(vim.fn.fnameescape(new_abs))
+  if old_buf and vim.api.nvim_buf_is_valid(old_buf) then
+    pcall(vim.api.nvim_buf_delete, old_buf, { force = true })
+  end
+  notify_info("Renamed to: " .. new_filename)
+end
+
+local function cmd_move(opts)
+  local current = vim.api.nvim_buf_get_name(0)
+  if current == "" then
+    notify_error("ObsidianMove", "no current file")
+    return
+  end
+  local dest = vim.trim(opts.args or "")
+  if dest == "" then
+    notify_error("ObsidianMove", "destination required (e.g. :ObsidianMove folder/subfolder)")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianMove")
+  if not vp then
+    return
+  end
+  local rel = util.relative_to_vault(current, vp)
+  local basename = current:match("([^/]+)$") or current
+  local dest_abs_check = util.absolute(dest .. "/" .. basename, vp)
+  if dest_abs_check and vim.fn.filereadable(dest_abs_check) == 1 then
+    notify_error("ObsidianMove", "A file named `" .. basename .. "` already exists in `" .. dest .. "`. Delete it first if you want to overwrite.")
+    return
+  end
+  if not confirm_destructive("Move `" .. rel .. "` to `" .. dest .. "/" .. basename .. "`?") then
+    notify_info("Cancelled: move")
+    return
+  end
+  local old_buf = vim.api.nvim_get_current_buf()
+  local _, err = cli.run({ "move", "path=" .. rel, "to=" .. dest })
+  if err then
+    notify_error("ObsidianMove", err)
+    return
+  end
+  local new_abs = util.absolute(dest .. "/" .. basename, vp) or dest
+  vim.cmd.edit(vim.fn.fnameescape(new_abs))
+  -- Close the old buffer (file moved to a different path).
+  if old_buf and vim.api.nvim_buf_is_valid(old_buf) then
+    pcall(vim.api.nvim_buf_delete, old_buf, { force = true })
+  end
+  notify_info("Moved to: " .. dest)
+end
+
+local function cmd_delete()
+  local current = vim.api.nvim_buf_get_name(0)
+  if current == "" then
+    notify_error("ObsidianDelete", "no current file")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianDelete")
+  if not vp then
+    return
+  end
+  local rel = util.relative_to_vault(current, vp)
+  if not confirm_destructive("Delete `" .. rel .. "`?\nThe file will be moved to Obsidian's trash.") then
+    notify_info("Cancelled: delete")
+    return
+  end
+  local _, err = cli.run({ "delete", "path=" .. rel })
+  if err then
+    notify_error("ObsidianDelete", err)
+    return
+  end
+  -- Close the buffer since the file no longer exists.
+  vim.cmd("bdelete!")
+  notify_info("Deleted: " .. rel)
+end
+
+local function cmd_open_in_app()
+  local current = vim.api.nvim_buf_get_name(0)
+  if current == "" then
+    notify_error("ObsidianOpenInApp", "no current file")
+    return
+  end
+  local vp = vault_path_or_error("ObsidianOpenInApp")
+  if not vp then
+    return
+  end
+  local rel = util.relative_to_vault(current, vp)
+  local _, err = cli.run({ "open", "path=" .. rel })
+  if err then
+    notify_error("ObsidianOpenInApp", err)
+    return
+  end
+end
+
+-- ============================================================================
+-- Templates (core Templates plugin)
+-- ============================================================================
+
+local function cmd_templates()
+  local out, err = cli.run({ "templates" })
+  if err then
+    notify_error("ObsidianTemplates", err)
+    return
+  end
+  if is_empty_text_result(out) then
+    notify_info("ObsidianTemplates: no templates configured. Enable Templates in Obsidian Settings → Core plugins → Templates and set a template folder.")
+    return
+  end
+  local lines = util.split_lines(out)
+  local items = {}
+  for _, name in ipairs(lines) do
+    table.insert(items, { template_name = name, text = name, display = name })
+  end
+  pickers.select(items, {
+    prompt = "Obsidian templates:",
+    format_item = function(item)
+      return item.display
+    end,
+  }, function(choice)
+    if not choice then
+      return
+    end
+    local _, insert_err = cli.run({ "template:insert", "name=" .. choice.template_name })
+    if insert_err then
+      notify_error("ObsidianTemplates", insert_err)
+      return
+    end
+    -- Reload the buffer since the template was inserted via the CLI.
+    vim.cmd("checktime")
+    notify_info("Inserted template: " .. choice.template_name)
+  end)
+end
+
+local function cmd_template_insert(opts)
+  local name = vim.trim(opts.args or "")
+  if name == "" then
+    notify_error("ObsidianTemplateInsert", "template name required")
+    return
+  end
+  local _, err = cli.run({ "template:insert", "name=" .. name })
+  if err then
+    notify_error("ObsidianTemplateInsert", err)
+    return
+  end
+  vim.cmd("checktime")
+  notify_info("Inserted template: " .. name)
+end
+
 -- Extract the [[wiki link]] span that contains the cursor column.
 -- Returns the raw inner text (e.g. "Note Name" or "Note|Alias" or
 -- "Note#Heading") or nil if the cursor isn't inside a link.
@@ -676,15 +1168,6 @@ end
 -- Bases — wrap the `obsidian bases`, `base:*` family of commands
 -- (Bases is a CORE plugin in Obsidian 1.8+, not a community plugin)
 -- ============================================================================
-
--- Returns true if the plain-text CLI output matches a "No X found." pattern,
--- which the CLI uses for empty results on commands that don't return JSON.
-local function is_empty_text_result(text)
-  if not text or text == "" then
-    return true
-  end
-  return vim.trim(text):match("^No .* found") ~= nil
-end
 
 local function cmd_bases()
   local out, err = cli.run({ "bases" })
@@ -1095,6 +1578,25 @@ function M.register(_)
     desc = "Toggle or check Obsidian's restricted (safe) mode",
     nargs = "?",
   })
+  -- v0.0.5: daily navigation
+  cmd("ObsidianYesterday", cmd_yesterday, { desc = "Open yesterday's daily note" })
+  cmd("ObsidianTomorrow", cmd_tomorrow, { desc = "Open tomorrow's daily note" })
+  -- v0.0.5: navigation & link auditing
+  cmd("ObsidianOutline", cmd_outline, { desc = "Show headings of the current file" })
+  cmd("ObsidianLinks", cmd_links, { desc = "Show outgoing links from the current file" })
+  cmd("ObsidianOrphans", cmd_orphans, { desc = "List files with no incoming links" })
+  cmd("ObsidianDeadends", cmd_deadends, { desc = "List files with no outgoing links" })
+  cmd("ObsidianTags", cmd_tags, { desc = "Browse all tags in the vault" })
+  cmd("ObsidianTag", cmd_tag, { desc = "Show notes containing a specific tag", nargs = "+" })
+  -- v0.0.5: file CRUD
+  cmd("ObsidianRename", cmd_rename, { desc = "Rename the current note", nargs = "+" })
+  cmd("ObsidianMove", cmd_move, { desc = "Move the current note to a folder", nargs = "+" })
+  cmd("ObsidianDelete", cmd_delete, { desc = "Delete the current note (moves to trash)" })
+  cmd("ObsidianOpenInApp", cmd_open_in_app, { desc = "Open the current note in the Obsidian desktop app" })
+  -- v0.0.5: templates
+  cmd("ObsidianTemplates", cmd_templates, { desc = "Browse and insert templates" })
+  cmd("ObsidianTemplateInsert", cmd_template_insert, { desc = "Insert a specific template by name", nargs = "+" })
+  -- v0.0.4: Bases
   cmd("ObsidianBases", cmd_bases, {
     desc = "List all .base files in the vault",
   })

@@ -68,6 +68,11 @@ require("obsidian-cli").setup({
 - **Purpose:** explicit picker backend. When `nil`, the plugin auto-detects: Snacks if `snacks.nvim` is installed, otherwise quickfix. Set explicitly to override the detection.
 - **v0.0.x note:** only Snacks and quickfix adapters ship in v0.0.x. Telescope and fzf-lua adapters are planned for v0.1.0.
 
+### `recent_limit`
+- **Type:** `number`
+- **Default:** `20`
+- **Purpose:** maximum number of entries shown by `:ObsidianRecent`. The plugin enumerates all vault markdown files, sorts by mtime, and trims to this count. Raise if your vault is large and you want to browse deeper.
+
 ### `keymaps`
 - **Type:** `boolean`
 - **Default:** `true`
@@ -135,6 +140,30 @@ require("obsidian-cli").setup({
 ```
 
 To switch vaults at runtime, you'd need to call `setup` again with different options. A cleaner runtime switcher is planned for v0.1.0 (`:ObsidianWorkspace`).
+
+## Alternative: strict lazy-loading
+
+The recommended install uses `event = "VeryLazy"` for simplicity. If you want the plugin to load ONLY when you first open a markdown file (saving ~10-20ms on startup), use `ft = "markdown"` instead:
+
+```lua
+{
+  "jeryldev/obsidian-cli.nvim",
+  ft = "markdown",
+  opts = {},
+}
+```
+
+**Trade-off:** commands like `:ObsidianToday` won't work until you've opened at least one markdown file. Once the first markdown file loads, all 44 commands and keymaps become available.
+
+For even stricter control (plugin loads ONLY when you invoke a specific command), list the commands you use in `cmd =`:
+
+```lua
+{
+  "jeryldev/obsidian-cli.nvim",
+  cmd = { "ObsidianToday", "ObsidianFind", "ObsidianSearch" },
+  opts = {},
+}
+```
 
 ## Disabling default keymaps
 

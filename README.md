@@ -12,16 +12,15 @@ The two plugins serve **genuinely different audiences**. Pick based on whether y
 |---|---|---|
 | **Implementation** | Thin wrapper over the official `obsidian` CLI | Pure Lua reimplementation, ~4-5k LOC |
 | **Lines of code** | ~2,000 | ~4,000-5,000 |
-| **Commands shipped** | 30 (daily-driver flows + plugin management + escape hatch + Bases) | 28 (full feature set) |
-| **Test coverage** | 60 plenary tests across util/config/cli/setup | Community-tested, no bundled suite |
+| **Commands shipped** | 44 (daily-driver + navigation + CRUD + plugin management + escape hatch + Bases + tags + templates) | 28 (full feature set) |
+| **Test coverage** | 122 plenary tests across 12 spec files | Community-tested, no bundled suite |
 | **Requires Obsidian app running** | Yes — the CLI is a remote control for the live app | No — works fully headless |
 | **Vault discovery** | Auto-detected via `obsidian vault info=path` | Requires explicit `workspaces` config |
 | **Search** | Uses Obsidian's actual search index (knows aliases, tags, link semantics) | Uses ripgrep (pure regex over file content) |
 | **Backlinks** | Obsidian's link graph (instant, cached by the app) | ripgrep on-demand (re-scans vault each request) |
-| **Templates** | Obsidian core Templates + Templater community plugin (full JS template runtime) | Custom `{{variable}}` string substitution only |
+| **Templates** | Obsidian core Templates + Templater (wrapped via `:ObsidianTemplates`, `:ObsidianNewFrom`) | Custom `{{variable}}` string substitution only |
 | **Daily notes path/format** | Read at runtime from your Obsidian Settings | Plugin-side `daily_notes` config (must duplicate) |
 | **Frontmatter** | Obsidian's typed property system | Custom Lua YAML parser |
-| **Templates** (Obsidian core) | Used by `:ObsidianNewFrom` today | Custom `{{var}}` substitution only |
 | **Templater, Dataview, Tasks, Periodic Notes** | Reachable via `:ObsidianCommand`/`:ObsidianCommandList` escape hatch (dedicated wrappers planned for v0.1.0 if you install the plugins) | Not accessible — these live in Obsidian's JavaScript runtime |
 | **Bases** (Obsidian core DB feature) | Wrapped: `:ObsidianBases`, `:ObsidianBaseViews`, `:ObsidianBaseQuery`, `:ObsidianBaseCreate` | Not accessible — Bases is Obsidian-native |
 | **Plugin management** (install, enable, disable, reload) | Wrapped: `:ObsidianPluginList` and CRUD commands — install community plugins from Neovim | Not applicable — doesn't use Obsidian's plugin ecosystem |
@@ -35,7 +34,7 @@ The two plugins serve **genuinely different audiences**. Pick based on whether y
 - You want **Obsidian's real search index** (knows aliases, tags, link semantics — not just regex over files)
 - You want **real backlinks** from Obsidian's link graph (cached by the app, not re-scanned per request)
 - You want the plugin to **just work** without configuring vault paths or daily-note formats — it reads them from Obsidian
-- You value a small, focused codebase (~1,500 LOC) that inherits new Obsidian features as the CLI exposes them
+- You value a small, focused codebase (~2,000 LOC) that inherits new Obsidian features as the CLI exposes them
 - You want the *option* to call into Templater/Dataview/Tasks/Bases via the CLI's escape hatch (dedicated wrappers planned for v0.1.0)
 
 ### Pick `obsidian-nvim/obsidian.nvim` if:
@@ -75,7 +74,7 @@ The two plugins serve **genuinely different audiences**. Pick based on whether y
 - **Auto-pairs interop** — wiki link completion plays nice with mini.pairs / nvim-autopairs
 - **Confirmation prompts** — destructive actions (disable/uninstall) prompt before proceeding
 - **Health check** — `:checkhealth obsidian-cli` diagnoses the entire stack
-- **60+ automated tests** — plenary-based unit test suite with CI integration
+- **122 automated tests** — plenary-based test suite covering all commands with mocked CLI, CI integration
 
 ## Requirements
 
@@ -114,32 +113,16 @@ You can launch it from inside Neovim with `:ObsidianStart` (cross-platform — r
 ```lua
 {
   "jeryldev/obsidian-cli.nvim",
-  ft = "markdown",
-  cmd = {
-    -- Daily notes & tasks
-    "ObsidianToday", "ObsidianTask", "ObsidianTodo", "ObsidianAppend",
-    "ObsidianTasksToday", "ObsidianTaskToggle",
-    -- Note creation & navigation
-    "ObsidianNew", "ObsidianNewFrom",
-    "ObsidianFind", "ObsidianRecent", "ObsidianSearch",
-    "ObsidianBacklinks", "ObsidianUnresolved",
-    "ObsidianResolveLink", "ObsidianFollowLink",
-    -- App control
-    "ObsidianStart",
-    -- Generic command runner (escape hatch for community plugins)
-    "ObsidianCommand", "ObsidianCommandList",
-    -- Plugin management
-    "ObsidianPluginList", "ObsidianPluginInstall", "ObsidianPluginUninstall",
-    "ObsidianPluginEnable", "ObsidianPluginDisable", "ObsidianPluginReload",
-    "ObsidianPluginInfo", "ObsidianRestrictedMode",
-    -- Bases (core database feature)
-    "ObsidianBases", "ObsidianBaseViews", "ObsidianBaseQuery", "ObsidianBaseCreate",
-  },
+  event = "VeryLazy",
   opts = {},
 }
 ```
 
+That's it. The plugin registers all 44 commands and default keymaps during `setup()`. No need to list them in the spec — `event = "VeryLazy"` loads the plugin on startup and everything is available immediately.
+
 After installing, run `:checkhealth obsidian-cli` to verify everything is wired up.
+
+> **Why not `ft = "markdown"` or `cmd = {...}`?** Those are valid alternatives for stricter lazy-loading, but `VeryLazy` adds only ~10-20ms to startup and avoids the "command not found because plugin hasn't loaded yet" problem. If you want tighter control, see [docs/configuration.md](docs/configuration.md) for the explicit cmd/keys spec.
 
 ### Wiki link completion (optional but recommended)
 
@@ -206,33 +189,27 @@ Full reference docs live in [`docs/`](docs/):
 - **[Architecture](docs/architecture.md)** — design decisions and CLI quirks (for contributors)
 - **[Testing](docs/testing.md)** — writing and running the plenary test suite
 
-## What's new in v0.0.4
+## What's new in v0.0.5
 
-- **15 new commands** across escape hatch, plugin management, Bases, and link navigation
-- **`:ObsidianPluginList`** — browse installed plugins with an action menu (enable/disable/uninstall/reload/info)
-- **`:ObsidianCommand` / `:ObsidianCommandList`** — escape hatch to run any registered Obsidian command, unlocks every community plugin
-- **`:ObsidianFollowLink`** / `<leader>ol` — smart follow of `[[wiki links]]` with create-if-missing prompt
-- **Bases wrappers** — `:ObsidianBases`, `:ObsidianBaseViews`, `:ObsidianBaseQuery`, `:ObsidianBaseCreate`
-- **`:ObsidianRestrictedMode`** — toggle Obsidian's safe mode (plus a banner in `:ObsidianPluginList` when active)
-- **Confirmation prompts** on destructive actions (disable, uninstall)
-- **`recent_limit` config option** — control how many entries `:ObsidianRecent` shows
-- **Windows path support** — `is_absolute` now recognizes `C:\`, `C:/`, etc.
-- **60-test plenary suite** with `make test`, GitHub Actions CI integration
-
-See the full v0.0.4 [commands reference](docs/commands.md) for details.
+- **14 new commands** (44 total) — daily navigation, link auditing, tags, file CRUD, templates
+- **`:ObsidianYesterday` / `:ObsidianTomorrow`** — navigate between adjacent daily notes
+- **`:ObsidianOutline`** — heading picker for the current note; jump to any section
+- **`:ObsidianLinks`** — outgoing links from the current note
+- **`:ObsidianOrphans` / `:ObsidianDeadends`** — link-graph health auditing
+- **`:ObsidianTags` / `:ObsidianTag <name>`** — tag browser with two-step flow (tags → notes)
+- **`:ObsidianRename` / `:ObsidianMove` / `:ObsidianDelete`** — file CRUD with confirmations + collision detection
+- **`:ObsidianOpenInApp`** — open current note in the Obsidian desktop app
+- **`:ObsidianTemplates` / `:ObsidianTemplateInsert`** — browse and insert templates
+- **Rename collision detection** — blocks rename when target filename already exists
+- **122 automated tests** (up from 60 in v0.0.4) across 12 spec files
+- **Simplified install** — just `event = "VeryLazy"` + `opts = {}`, no `cmd`/`keys` lists needed
 
 ## Roadmap
 
 Planned for `v0.1.0`:
 
-- `:ObsidianYesterday`, `:ObsidianTomorrow`, `:ObsidianPrependToday`
-- `:ObsidianTags` / `:ObsidianTag <name>` tag browser
-- `:ObsidianRename`, `:ObsidianMove`, `:ObsidianDelete` (destructive, with confirmations)
-- `:ObsidianOpenInApp` (open current note in the Obsidian app window)
-- `:ObsidianOutline` (heading picker for the current note)
-- `:ObsidianLinks`, `:ObsidianOrphans`, `:ObsidianDeadends` (link-graph auditing)
+- `:ObsidianPrependToday`
 - `:ObsidianRecentlyOpened` (Obsidian's internal recency list, complements mtime-based `:ObsidianRecent`)
-- `:ObsidianTemplates` / `:ObsidianTemplateInsert` (core Templates picker)
 - `:ObsidianProperties` / `:ObsidianPropertySet` (typed frontmatter editing)
 - `:ObsidianWorkspace` (multi-vault switching)
 - `:ObsidianDiff` (CLI sync history viewer — requires Obsidian Sync)

@@ -15,9 +15,9 @@ CONTENTS                                                  *obsidian-cli-contents
 
 obsidian-cli.nvim is a thin Neovim wrapper for the official Obsidian CLI.
 It drives the live Obsidian app via shell-out commands rather than
-reimplementing vault parsing in Lua.
+reimplementing vault parsing in Lua. 44 commands across 11 categories.
 
-Status: v0.0.1 — early version. APIs may change before v0.1.0.
+Status: v0.0.5. APIs may change before v1.0.
 
 ==============================================================================
 2. REQUIREMENTS                                       *obsidian-cli-requirements*
@@ -31,18 +31,24 @@ Status: v0.0.1 — early version. APIs may change before v0.1.0.
 3. SETUP                                                     *obsidian-cli-setup*
 
 >lua
+    -- Minimal install (lazy.nvim):
+    { "jeryldev/obsidian-cli.nvim", event = "VeryLazy", opts = {} }
+
+    -- Full config with overrides:
     require("obsidian-cli").setup({
       binary = "obsidian",
       vault = nil,
       vault_path = nil,
       picker = nil,
+      recent_limit = 20,
       keymaps = true,
+      disable_diagnostics_in_vault = true,
       buffer_options = {
         wrap = true,
         linebreak = true,
         breakindent = true,
         colorcolumn = "80",
-        spell = true,
+        spell = false,
         conceallevel = 2,
       },
     })
@@ -51,8 +57,15 @@ Status: v0.0.1 — early version. APIs may change before v0.1.0.
 ==============================================================================
 4. COMMANDS                                               *obsidian-cli-commands*
 
+Daily notes ~
                                                                 *:ObsidianToday*
 :ObsidianToday          Open today's daily note in Neovim.
+
+                                                             *:ObsidianYesterday*
+:ObsidianYesterday      Open yesterday's daily note.
+
+                                                             *:ObsidianTomorrow*
+:ObsidianTomorrow       Open tomorrow's daily note.
 
                                                                  *:ObsidianTask*
 :ObsidianTask {text}    Append "- [ ] {text}" to today's daily note.
@@ -66,6 +79,7 @@ Status: v0.0.1 — early version. APIs may change before v0.1.0.
                                                            *:ObsidianTasksToday*
 :ObsidianTasksToday     Show today's incomplete tasks in a picker.
 
+Note creation ~
                                                                   *:ObsidianNew*
 :ObsidianNew {title}    Create a new note named {title}.
 
@@ -73,6 +87,7 @@ Status: v0.0.1 — early version. APIs may change before v0.1.0.
 :ObsidianNewFrom {template} {title}
                         Create a new note from a template.
 
+Finding & navigating ~
                                                                  *:ObsidianFind*
 :ObsidianFind           Pick a note from the vault.
 
@@ -80,7 +95,8 @@ Status: v0.0.1 — early version. APIs may change before v0.1.0.
 :ObsidianRecent         Pick from recently modified notes.
 
                                                                *:ObsidianSearch*
-:ObsidianSearch {query} Full-text search the vault.
+:ObsidianSearch [{query}]
+                        Full-text search. No args = live mode.
 
                                                             *:ObsidianBacklinks*
 :ObsidianBacklinks      Show backlinks for the current note.
@@ -88,27 +104,139 @@ Status: v0.0.1 — early version. APIs may change before v0.1.0.
                                                            *:ObsidianUnresolved*
 :ObsidianUnresolved     List unresolved [[wiki]] links in the vault.
 
+                                                              *:ObsidianOutline*
+:ObsidianOutline        Show headings of the current file as a picker.
+
+                                                                *:ObsidianLinks*
+:ObsidianLinks          Show outgoing links from the current file.
+
+                                                              *:ObsidianOrphans*
+:ObsidianOrphans        List files with no incoming links.
+
+                                                             *:ObsidianDeadends*
+:ObsidianDeadends       List files with no outgoing links.
+
+Tasks & links ~
+                                                          *:ObsidianTaskToggle*
+:ObsidianTaskToggle     Toggle checkbox on the current line.
+
+                                                          *:ObsidianFollowLink*
+:ObsidianFollowLink     Follow [[link]] under cursor; create if missing.
+
+                                                          *:ObsidianResolveLink*
+:ObsidianResolveLink    Force-create note from [[link]] under cursor.
+
+Tags ~
+                                                                 *:ObsidianTags*
+:ObsidianTags           Browse all tags (two-step: tags -> notes).
+
+                                                                  *:ObsidianTag*
+:ObsidianTag {name}     Show notes containing a specific tag.
+
+File operations ~
+                                                               *:ObsidianRename*
+:ObsidianRename {name}  Rename the current note (with confirmation).
+
+                                                                 *:ObsidianMove*
+:ObsidianMove {folder}  Move the current note (with confirmation).
+
+                                                               *:ObsidianDelete*
+:ObsidianDelete         Delete the current note (with confirmation).
+
+                                                            *:ObsidianOpenInApp*
+:ObsidianOpenInApp      Open current note in the Obsidian app.
+
+Templates ~
+                                                            *:ObsidianTemplates*
+:ObsidianTemplates      Browse and insert templates.
+
+                                                       *:ObsidianTemplateInsert*
+:ObsidianTemplateInsert {name}
+                        Insert a specific template by name.
+
+Escape hatch ~
+                                                              *:ObsidianCommand*
+:ObsidianCommand {id}   Run any registered Obsidian command.
+
+                                                          *:ObsidianCommandList*
+:ObsidianCommandList [{filter}]
+                        Browse and run Obsidian commands.
+
+Plugin management ~
+                                                           *:ObsidianPluginList*
+:ObsidianPluginList     Browse installed plugins with action menu.
+
+                                                           *:ObsidianPluginInfo*
+:ObsidianPluginInfo {id}
+                        Show plugin metadata.
+
+                                                        *:ObsidianPluginInstall*
+:ObsidianPluginInstall {id}
+                        Install and auto-enable a community plugin.
+
+                                                      *:ObsidianPluginUninstall*
+:ObsidianPluginUninstall {id}
+                        Uninstall a community plugin (with confirmation).
+
+                                                         *:ObsidianPluginEnable*
+:ObsidianPluginEnable {id}
+                        Enable a plugin.
+
+                                                        *:ObsidianPluginDisable*
+:ObsidianPluginDisable {id}
+                        Disable a plugin (with confirmation).
+
+                                                         *:ObsidianPluginReload*
+:ObsidianPluginReload {id}
+                        Hot-reload a plugin (for developers).
+
+                                                       *:ObsidianRestrictedMode*
+:ObsidianRestrictedMode [on|off]
+                        Toggle or check Obsidian's safe mode.
+
+Bases ~
+                                                                *:ObsidianBases*
+:ObsidianBases          List all .base files in the vault.
+
+                                                            *:ObsidianBaseViews*
+:ObsidianBaseViews [{path}]
+                        List views in a .base file.
+
+                                                            *:ObsidianBaseQuery*
+:ObsidianBaseQuery {base} {view}
+                        Query a base view.
+
+                                                           *:ObsidianBaseCreate*
+:ObsidianBaseCreate {base} {view} {name}
+                        Create a new item in a base.
+
+App control ~
+                                                                *:ObsidianStart*
+:ObsidianStart          Launch the Obsidian desktop app.
+
 ==============================================================================
 5. KEYMAPS                                                 *obsidian-cli-keymaps*
 
-Global ~
+Global (set `keymaps = false` to opt out) ~
 
   <leader>ot   :ObsidianToday
-  <leader>oT   :ObsidianTask
-  <leader>oa   :ObsidianAppend
-  <leader>on   :ObsidianNew
-  <leader>oN   :ObsidianNewFrom
+  <leader>oT   :ObsidianTask (prompt)
+  <leader>oa   :ObsidianAppend (prompt)
+  <leader>on   :ObsidianNew (prompt)
+  <leader>oN   :ObsidianNewFrom (prompt)
   <leader>of   :ObsidianFind
+  <leader>fo   :ObsidianFind (alias)
   <leader>or   :ObsidianRecent
-  <leader>os   :ObsidianSearch
+  <leader>os   :ObsidianSearch (live)
   <leader>ox   :ObsidianTasksToday
   <leader>ou   :ObsidianUnresolved
 
 Buffer-local (vault markdown only) ~
 
   <leader>ob   :ObsidianBacklinks
-
-Set `keymaps = false` in setup() to opt out and wire your own.
+  <leader>oc   :ObsidianTaskToggle
+  <leader>ol   :ObsidianFollowLink
+  <leader>oR   :ObsidianResolveLink
 
 ==============================================================================
 6. HEALTH                                                   *obsidian-cli-health*

@@ -1,8 +1,8 @@
 # Commands
 
-Every user command exposed by `obsidian-cli.nvim` as of v0.0.4. All commands prefix with `:Obsidian` and are dispatched through the official Obsidian CLI to your running Obsidian app.
+Every user command exposed by `obsidian-cli.nvim`. All commands prefix with `:Obsidian` and are dispatched through the official Obsidian CLI to your running Obsidian app.
 
-**Command count:** 30 total across 6 categories.
+**Command count:** 44 total across 11 categories.
 
 ## Daily notes
 
@@ -274,6 +274,121 @@ Create a new row in a base. The row becomes a new `.md` note with frontmatter ma
 - **Example:** `:ObsidianBaseCreate projects.base Active Migrate to Postgres`
 - **Notes:** the name can contain spaces (arguments from the third onward are joined).
 
+## Daily navigation *(v0.0.5)*
+
+### `:ObsidianYesterday` *(v0.0.5)*
+
+Open yesterday's daily note. Computes the date by taking today's daily note path and replacing the date portion with yesterday's date. Supports `YYYY-MM-DD` and other common date formats. Handles month/year boundaries correctly.
+
+- **Wraps:** date math on `obsidian daily:path` output
+- **Notes:** if yesterday's note doesn't exist on disk, Neovim creates a new buffer. Save with `:w` to create the file.
+
+### `:ObsidianTomorrow` *(v0.0.5)*
+
+Same as `:ObsidianYesterday` but for tomorrow's date.
+
+## Navigation & link auditing *(v0.0.5)*
+
+### `:ObsidianOutline` *(v0.0.5)*
+
+Show headings of the current file as a picker. Selecting a heading jumps to that line. Indentation in the picker reflects heading levels (`##` vs `###`).
+
+- **Wraps:** `obsidian outline path={current} format=json`
+- **Buffer-local:** only works on vault markdown files
+- **Empty case:** "no headings in this file"
+
+### `:ObsidianLinks` *(v0.0.5)*
+
+Show outgoing links from the current file. Answers "what does this note link TO?"
+
+- **Wraps:** `obsidian links path={current}`
+- **Buffer-local:** only works on vault markdown files
+- **Empty case:** "no outgoing links in this file"
+
+### `:ObsidianOrphans` *(v0.0.5)*
+
+List files with no incoming links — notes that nothing links to. Cleanup candidates.
+
+- **Wraps:** `obsidian orphans`
+- **Empty case:** "no orphan files"
+
+### `:ObsidianDeadends` *(v0.0.5)*
+
+List files with no outgoing links — notes that don't link to anything. Content islands.
+
+- **Wraps:** `obsidian deadends`
+- **Empty case:** "no dead-end files"
+
+## Tag browser *(v0.0.5)*
+
+### `:ObsidianTags` *(v0.0.5)*
+
+Browse all tags in the vault with occurrence counts. Two-step picker: first select a tag, then see all notes containing that tag.
+
+- **Wraps:** `obsidian tags counts format=json` → `obsidian tag name={tag} verbose`
+- **Empty case:** "no tags in vault"
+
+### `:ObsidianTag {name}` *(v0.0.5)*
+
+Show notes containing a specific tag directly (skips the tag-selection step). The `#` prefix is optional.
+
+- **Wraps:** `obsidian tag name={name} verbose`
+- **Examples:** `:ObsidianTag project` or `:ObsidianTag #project`
+- **Empty case:** "No notes found with tag #name"
+
+## File operations *(v0.0.5)*
+
+### `:ObsidianRename {new-name}` *(v0.0.5)*
+
+Rename the current note. Shows the full resulting filename (with `.md` extension) in the confirmation dialog. Blocks the operation if a file with the target name already exists.
+
+- **Wraps:** `obsidian rename path={current} name={new-name}`
+- **Confirmation:** Yes/No prompt with default No
+- **Collision detection:** checks `vim.fn.filereadable` before sending the CLI command
+- **Buffer cleanup:** closes the old buffer after renaming (no stale buffer left behind)
+- **Auto .md:** appends `.md` if not already present in the name
+
+### `:ObsidianMove {folder}` *(v0.0.5)*
+
+Move the current note to a different folder. Shows the full destination path in the confirmation dialog. Blocks if a file with the same name already exists at the destination.
+
+- **Wraps:** `obsidian move path={current} to={folder}`
+- **Confirmation:** Yes/No prompt with default No
+- **Collision detection:** checks `vim.fn.filereadable` on the destination path
+- **Buffer cleanup:** closes the old buffer, opens the file at the new path
+
+### `:ObsidianDelete` *(v0.0.5)*
+
+Delete the current note. The file is moved to Obsidian's trash (`.trash/` in the vault), not permanently deleted. Recoverable from the Obsidian app.
+
+- **Wraps:** `obsidian delete path={current}`
+- **Confirmation:** Yes/No prompt with default No. The confirm message explicitly states the file goes to trash.
+- **Buffer cleanup:** runs `bdelete!` after successful deletion
+
+### `:ObsidianOpenInApp` *(v0.0.5)*
+
+Open the current note in the Obsidian desktop app. The app window comes to focus and displays the note with full Obsidian rendering (styled headings, rendered links, plugins active).
+
+- **Wraps:** `obsidian open path={current}`
+- **Use case:** when you want to see the "real" Obsidian rendering, use the graph view, or interact with Obsidian-native features
+
+## Templates *(v0.0.5)*
+
+### `:ObsidianTemplates` *(v0.0.5)*
+
+Browse available templates in a picker. Selecting a template inserts it into the current note (at the active file in Obsidian).
+
+- **Wraps:** `obsidian templates` → `obsidian template:insert name={name}`
+- **Prerequisites:** Obsidian core Templates plugin enabled + template folder configured in Settings
+- **Empty case:** "no templates configured" with setup instructions
+
+### `:ObsidianTemplateInsert {name}` *(v0.0.5)*
+
+Insert a specific template by name into the current note. Skips the picker.
+
+- **Wraps:** `obsidian template:insert name={name}`
+- **Example:** `:ObsidianTemplateInsert daily`
+
 ## Health check
 
 ### `:checkhealth obsidian-cli`
@@ -322,5 +437,19 @@ If any line is red or yellow, the printed hint tells you how to fix it.
 | `:ObsidianBaseViews` | — | global | no | **v0.0.4** |
 | `:ObsidianBaseQuery` | — | global | yes | **v0.0.4** |
 | `:ObsidianBaseCreate` | — | global | no | **v0.0.4** |
+| `:ObsidianYesterday` | — | global | no | **v0.0.5** |
+| `:ObsidianTomorrow` | — | global | no | **v0.0.5** |
+| `:ObsidianOutline` | — | vault markdown | yes | **v0.0.5** |
+| `:ObsidianLinks` | — | vault markdown | yes | **v0.0.5** |
+| `:ObsidianOrphans` | — | global | yes | **v0.0.5** |
+| `:ObsidianDeadends` | — | global | yes | **v0.0.5** |
+| `:ObsidianTags` | — | global | yes (select) | **v0.0.5** |
+| `:ObsidianTag` | — | global | yes | **v0.0.5** |
+| `:ObsidianRename` | — | vault markdown | no (confirm) | **v0.0.5** |
+| `:ObsidianMove` | — | vault markdown | no (confirm) | **v0.0.5** |
+| `:ObsidianDelete` | — | vault markdown | no (confirm) | **v0.0.5** |
+| `:ObsidianOpenInApp` | — | vault markdown | no | **v0.0.5** |
+| `:ObsidianTemplates` | — | global | yes (select) | **v0.0.5** |
+| `:ObsidianTemplateInsert` | — | global | no | **v0.0.5** |
 
-**Bold** = new in v0.0.4.
+**44 commands total.** Bold = new in that version.

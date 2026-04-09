@@ -4,14 +4,22 @@
 
 ## What's covered
 
-| Spec file | Target module | Tests |
+| Spec file | Tests | Coverage |
 |---|---|---|
-| `tests/util_spec.lua` | `lua/obsidian-cli/util.lua` | Path helpers — `is_absolute`, `absolute`, `relative_to_vault`, `in_vault`, `split_lines`, `expand` |
-| `tests/config_spec.lua` | `lua/obsidian-cli/config.lua` | Default values, deep-merge behavior, user overrides |
-| `tests/cli_spec.lua` | `lua/obsidian-cli/cli.lua` | Error detection (`Vault not found.` on stdout, `No X found.` empty results), JSON parsing, vault path caching |
-| `tests/setup_spec.lua` | `lua/obsidian-cli/init.lua` | `setup()` end-to-end — command registration, keymap registration, config merging |
+| `tests/util_spec.lua` | 25 | Path helpers — `is_absolute` (Unix + Windows), `absolute`, `relative_to_vault`, `in_vault`, `split_lines`, `expand` |
+| `tests/config_spec.lua` | 9 | Default values, deep-merge, buffer_options=false, immutability |
+| `tests/cli_spec.lua` | 18 | Error detection (6 patterns), JSON parsing, "No X found." handling, vault path caching + reset |
+| `tests/setup_spec.lua` | 8 | All 44 command registrations, keymap wiring on/off |
+| `tests/daily_spec.lua` | 14 | Today, Yesterday, Tomorrow (with date math), Task CLI fallback, TasksToday JSON + filtering |
+| `tests/daily_advanced_spec.lua` | 5 | In-buffer task append, plain text append, Todo alias, cursor jump, background-buffer non-jump |
+| `tests/navigation_spec.lua` | 15 | Outline JSON, Links, Orphans, Deadends (all with empty cases), FollowLink (5 cases), Backlinks |
+| `tests/unresolved_spec.lua` | 11 | Unresolved (string/comma-separated/missing sources), ResolveLink (create, alias, heading, block-ref, no-link, multi-link line) |
+| `tests/tasks_spec.lua` | 6 | TaskToggle: [ ]↔[x], uppercase [X], no checkbox, first-only, correct line |
+| `tests/crud_spec.lua` | 34 | New, NewFrom, Find, Recent, Search (5 cases), Rename (7 cases incl. collision + extension), Move, Delete, OpenInApp, Templates, TemplateInsert |
+| `tests/plugins_spec.lua` | 7 | Command, CommandList, Install, Enable, Disable (confirm/cancel), Reload, RestrictedMode (query/on/off) |
+| `tests/completion_spec.lua` | 7+5p | Source creation, trigger chars, enabled() (4 cases), context detection, auto-pairs interop. 5 tests pending (mock-fragile `get_completions` data flow) |
 
-Total: **60+ tests** across 4 spec files as of v0.0.4.
+Total: **122 tests** across 12 spec files as of v0.0.5.
 
 ## Running tests
 

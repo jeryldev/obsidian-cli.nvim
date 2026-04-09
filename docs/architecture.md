@@ -118,7 +118,7 @@ Responsibilities:
 
 ### `lua/obsidian-cli/commands.lua`
 
-The 14 user commands (`:Obsidian*`). Each command:
+The 44 user commands (`:Obsidian*`). Each command:
 
 1. Calls `cli.run` or `cli.run_json` to fetch data from the CLI
 2. Builds picker items or dispatches in-buffer edits
@@ -188,11 +188,7 @@ When a query has zero results, several commands return the literal string `No ta
 
 `obsidian unresolved format=json verbose` returns `"sources": "Welcome.md"` (string) for a single source. The wrapper splits on comma and handles both string and table shapes defensively.
 
-### 6. Wiki link `daily todo` filter combo broken
-
-Already mentioned above — but worth knowing in general: filter combinations may not all work as documented. The wrapper tests the documented behavior and falls back to client-side filtering when the CLI's behavior doesn't match expectations.
-
-### 7. CLI's documented auto-launch doesn't actually work
+### 6. CLI's documented auto-launch doesn't actually work
 
 The [official Obsidian docs](https://help.obsidian.md/cli) state: *"If Obsidian is not running, the first command you run launches Obsidian."* In CLI v1.12.7 this is **false** for one-shot subcommands like `obsidian daily:path` — the command returns `The CLI is unable to find Obsidian.` and exits without launching the app.
 
@@ -217,22 +213,18 @@ There is no path within Obsidian's official tooling to a true headless plugin th
 
 ## Lazy-loading behavior
 
-The plugin is lazy by default:
+The recommended install uses `event = "VeryLazy"` which loads the plugin
+after Neovim's UI draws (~10-20ms cost). All 44 commands and keymaps
+register during `setup()` and are available immediately. No `cmd` or
+`keys` lists needed in the Lazy spec.
 
-- **Loaded on:** `FileType markdown`, OR any of the `:Obsidian*` commands, OR any of the `<leader>o*` keymaps
-- **Not loaded on:** plain Neovim startup
-- **Cold-start cost:** ~10-20ms when first triggered
+## Testing
 
-The Lazy.nvim spec uses `cmd = {...}`, `ft = "markdown"`, and `keys = {...}` to define lazy triggers. See `~/.config/nvim/lua/plugins/obsidian-cli.lua` for the user-side spec.
+The plugin ships 122 plenary tests across 12 spec files. See `docs/testing.md`
+for the full spec file inventory, mock patterns, and `make test` instructions.
 
-## Testing strategy
-
-The plugin doesn't yet ship automated tests (planned for v0.1.0). Manual testing in v0.0.x covers:
-
-1. **Smoke tests** via headless `nvim --headless` calls during development
-2. **End-to-end command tests** in a real vault
-3. **JSON parsing tests** by probing real CLI output for each command
-4. **Auto-pairs interop** by testing with mini.pairs active and inactive
-5. **Cross-picker validation** — Snacks and quickfix paths exercised separately
-
-A `tests/` directory with `plenary.test_harness` is on the v0.1.0 roadmap.
+Tests mock `vim.system` to isolate the pure-Lua logic from the real CLI binary,
+so they run in CI without Obsidian installed. Coverage includes all command
+implementations, error handling, JSON parsing, wiki-link extraction, buffer
+editing (task toggle, in-buffer append), confirmation flows, and the blink.cmp
+completion source's enabled() + context detection.

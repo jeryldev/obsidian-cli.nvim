@@ -1,0 +1,70 @@
+-- Tests for task commands: TaskToggle, ResolveLink
+
+local h = require("tests.helpers")
+
+describe("task editing", function()
+  after_each(h.restore)
+
+  describe(":ObsidianTaskToggle", function()
+    it("toggles [ ] to [x]", function()
+      h.setup_with_mock({ ["vault"] = { stdout = "/vault" } })
+      local buf = h.create_buffer({ "- [ ] buy milk", "- [ ] write docs" })
+      h.set_buf_name(buf, "/vault/test.md")
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      vim.cmd("ObsidianTaskToggle")
+      local line = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+      assert.equals("- [x] buy milk", line)
+    end)
+
+    it("toggles [x] back to [ ]", function()
+      h.setup_with_mock({ ["vault"] = { stdout = "/vault" } })
+      local buf = h.create_buffer({ "- [x] done task" })
+      h.set_buf_name(buf, "/vault/test.md")
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      vim.cmd("ObsidianTaskToggle")
+      local line = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+      assert.equals("- [ ] done task", line)
+    end)
+
+    it("toggles [X] (uppercase) to [ ]", function()
+      h.setup_with_mock({ ["vault"] = { stdout = "/vault" } })
+      local buf = h.create_buffer({ "- [X] uppercase done" })
+      h.set_buf_name(buf, "/vault/test.md")
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      vim.cmd("ObsidianTaskToggle")
+      local line = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+      assert.equals("- [ ] uppercase done", line)
+    end)
+
+    it("errors on a line without a checkbox", function()
+      h.setup_with_mock({ ["vault"] = { stdout = "/vault" } })
+      local buf = h.create_buffer({ "plain text no checkbox" })
+      h.set_buf_name(buf, "/vault/test.md")
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      vim.cmd("ObsidianTaskToggle")
+      assert.matches("no checkbox", h.last_notification())
+    end)
+
+    it("only toggles the first checkbox on the line", function()
+      h.setup_with_mock({ ["vault"] = { stdout = "/vault" } })
+      local buf = h.create_buffer({ "- [ ] first [ ] second" })
+      h.set_buf_name(buf, "/vault/test.md")
+      vim.api.nvim_win_set_cursor(0, { 1, 0 })
+      vim.cmd("ObsidianTaskToggle")
+      local line = vim.api.nvim_buf_get_lines(0, 0, 1, false)[1]
+      assert.equals("- [x] first [ ] second", line)
+    end)
+
+    it("toggles on the correct line when cursor is not on line 1", function()
+      h.setup_with_mock({ ["vault"] = { stdout = "/vault" } })
+      local buf = h.create_buffer({ "line 1", "- [ ] line 2", "line 3" })
+      h.set_buf_name(buf, "/vault/test.md")
+      vim.api.nvim_win_set_cursor(0, { 2, 0 })
+      vim.cmd("ObsidianTaskToggle")
+      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      assert.equals("line 1", lines[1])
+      assert.equals("- [x] line 2", lines[2])
+      assert.equals("line 3", lines[3])
+    end)
+  end)
+end)
