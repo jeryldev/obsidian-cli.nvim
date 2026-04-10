@@ -94,16 +94,13 @@ local function register_vault_autocmd()
   --   - opening an existing file (BufWinEnter / FileType)
   --   - saving a no-name buffer to a path (BufFilePost / BufWritePost)
   --   - renaming via :file (BufFilePost)
-  vim.api.nvim_create_autocmd(
-    { "FileType", "BufWinEnter", "BufFilePost", "BufWritePost" },
-    {
-      group = group,
-      pattern = { "markdown", "*.md" },
-      callback = function(ev)
-        maybe_apply_to_buffer(ev.buf)
-      end,
-    }
-  )
+  vim.api.nvim_create_autocmd({ "FileType", "BufWinEnter", "BufFilePost", "BufWritePost" }, {
+    group = group,
+    pattern = { "markdown", "*.md" },
+    callback = function(ev)
+      maybe_apply_to_buffer(ev.buf)
+    end,
+  })
 end
 
 function M.setup(opts)

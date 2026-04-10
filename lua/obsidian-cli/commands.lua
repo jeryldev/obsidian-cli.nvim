@@ -7,7 +7,8 @@ local pickers = require("obsidian-cli.pickers")
 local function friendly_error(err)
   err = tostring(err or "")
   if err:match("Vault not found") then
-    return err .. "\nHint: open a vault in the Obsidian app, or set `vault` in setup() to target a specific one."
+    return err
+      .. "\nHint: open a vault in the Obsidian app, or set `vault` in setup() to target a specific one."
   end
   if err:match("unable to find Obsidian") then
     return err .. "\nHint: launch the Obsidian desktop app (e.g. `open -a Obsidian`) and retry."
@@ -142,12 +143,15 @@ local function daily_note_for_offset(offset)
   -- and rebuild the path. We detect the date format by pattern-matching
   -- common formats that Obsidian supports (YYYY-MM-DD is the default).
   local today = os.date("*t")
-  local target = os.date("*t", os.time({
-    year = today.year,
-    month = today.month,
-    day = today.day + offset,
-    hour = 12,
-  }))
+  local target = os.date(
+    "*t",
+    os.time({
+      year = today.year,
+      month = today.month,
+      day = today.day + offset,
+      hour = 12,
+    })
+  )
   -- Replace the date string in the path. Try multiple formats that
   -- Obsidian users commonly configure.
   local today_str = os.date("%Y-%m-%d")
@@ -767,7 +771,12 @@ local function cmd_rename(opts)
   -- delete the target first.
   local new_abs_check = util.absolute(new_filename, vp)
   if new_abs_check and vim.fn.filereadable(new_abs_check) == 1 then
-    notify_error("ObsidianRename", "A file named `" .. new_filename .. "` already exists. Delete it first if you want to overwrite.")
+    notify_error(
+      "ObsidianRename",
+      "A file named `"
+        .. new_filename
+        .. "` already exists. Delete it first if you want to overwrite."
+    )
     return
   end
   if not confirm_destructive("Rename `" .. rel .. "` to `" .. new_filename .. "`?") then
@@ -807,7 +816,14 @@ local function cmd_move(opts)
   local basename = current:match("([^/]+)$") or current
   local dest_abs_check = util.absolute(dest .. "/" .. basename, vp)
   if dest_abs_check and vim.fn.filereadable(dest_abs_check) == 1 then
-    notify_error("ObsidianMove", "A file named `" .. basename .. "` already exists in `" .. dest .. "`. Delete it first if you want to overwrite.")
+    notify_error(
+      "ObsidianMove",
+      "A file named `"
+        .. basename
+        .. "` already exists in `"
+        .. dest
+        .. "`. Delete it first if you want to overwrite."
+    )
     return
   end
   if not confirm_destructive("Move `" .. rel .. "` to `" .. dest .. "/" .. basename .. "`?") then
@@ -840,7 +856,9 @@ local function cmd_delete()
     return
   end
   local rel = util.relative_to_vault(current, vp)
-  if not confirm_destructive("Delete `" .. rel .. "`?\nThe file will be moved to Obsidian's trash.") then
+  if
+    not confirm_destructive("Delete `" .. rel .. "`?\nThe file will be moved to Obsidian's trash.")
+  then
     notify_info("Cancelled: delete")
     return
   end
@@ -883,7 +901,9 @@ local function cmd_templates()
     return
   end
   if is_empty_text_result(out) then
-    notify_info("ObsidianTemplates: no templates configured. Enable Templates in Obsidian Settings → Core plugins → Templates and set a template folder.")
+    notify_info(
+      "ObsidianTemplates: no templates configured. Enable Templates in Obsidian Settings → Core plugins → Templates and set a template folder."
+    )
     return
   end
   local lines = util.split_lines(out)
@@ -1464,8 +1484,7 @@ local function cmd_plugin_list()
     if not choice then
       return
     end
-    local actions = choice.enabled
-        and { "Disable", "Reload", "Uninstall", "Info", "Cancel" }
+    local actions = choice.enabled and { "Disable", "Reload", "Uninstall", "Info", "Cancel" }
       or { "Enable", "Uninstall", "Info", "Cancel" }
     pickers.select(actions, {
       prompt = choice.id .. ":",
@@ -1592,10 +1611,18 @@ function M.register(_)
   cmd("ObsidianRename", cmd_rename, { desc = "Rename the current note", nargs = "+" })
   cmd("ObsidianMove", cmd_move, { desc = "Move the current note to a folder", nargs = "+" })
   cmd("ObsidianDelete", cmd_delete, { desc = "Delete the current note (moves to trash)" })
-  cmd("ObsidianOpenInApp", cmd_open_in_app, { desc = "Open the current note in the Obsidian desktop app" })
+  cmd(
+    "ObsidianOpenInApp",
+    cmd_open_in_app,
+    { desc = "Open the current note in the Obsidian desktop app" }
+  )
   -- v0.0.5: templates
   cmd("ObsidianTemplates", cmd_templates, { desc = "Browse and insert templates" })
-  cmd("ObsidianTemplateInsert", cmd_template_insert, { desc = "Insert a specific template by name", nargs = "+" })
+  cmd(
+    "ObsidianTemplateInsert",
+    cmd_template_insert,
+    { desc = "Insert a specific template by name", nargs = "+" }
+  )
   -- v0.0.4: Bases
   cmd("ObsidianBases", cmd_bases, {
     desc = "List all .base files in the vault",

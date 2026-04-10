@@ -2,8 +2,7 @@
 
 local M = {}
 
-local cli = require("obsidian-cli.cli")
-local pickers = require("obsidian-cli.pickers")
+-- pickers module is required fresh inside setup_with_mock, not here.
 
 -- Stores the real functions so we can restore them.
 M._real_system = vim.system
@@ -54,35 +53,13 @@ function M.capture_notifications()
   end
 end
 
--- Capture pickers.pick calls instead of opening a real picker.
+-- Picker calls are captured inside setup_with_mock directly.
 M.picker_calls = {}
-
-function M.capture_pickers()
-  M.picker_calls = {}
-  pickers.pick = function(items, opts)
-    table.insert(M.picker_calls, { items = items, opts = opts })
-  end
-  pickers.select = function(items, opts, on_choice)
-    table.insert(M.picker_calls, { items = items, opts = opts, select = true })
-    -- Auto-select first item for test flow.
-    if on_choice and #items > 0 then
-      on_choice(items[1])
-    end
-  end
-  pickers.live_search = function(opts)
-    table.insert(M.picker_calls, { live = true, opts = opts })
-  end
-end
 
 -- Restore all mocks.
 function M.restore()
   vim.system = M._real_system
   vim.notify = M._real_notify
-  -- Re-require to reset pickers module state.
-  package.loaded["obsidian-cli.pickers"] = nil
-  package.loaded["obsidian-cli.pickers.snacks"] = nil
-  package.loaded["obsidian-cli.pickers.quickfix"] = nil
-  package.loaded["obsidian-cli.pickers.init"] = nil
 end
 
 -- Setup the plugin with mocked CLI for testing.

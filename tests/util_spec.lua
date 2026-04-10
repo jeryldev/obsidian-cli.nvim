@@ -62,7 +62,10 @@ describe("util.relative_to_vault", function()
 
   it("strips the vault prefix", function()
     assert.equals("note.md", util.relative_to_vault("/home/user/vault/note.md", vault))
-    assert.equals("folder/note.md", util.relative_to_vault("/home/user/vault/folder/note.md", vault))
+    assert.equals(
+      "folder/note.md",
+      util.relative_to_vault("/home/user/vault/folder/note.md", vault)
+    )
   end)
 
   it("returns the absolute path unchanged when outside the vault", function()
@@ -70,7 +73,10 @@ describe("util.relative_to_vault", function()
   end)
 
   it("handles trailing slashes on the vault", function()
-    assert.equals("note.md", util.relative_to_vault("/home/user/vault/note.md", "/home/user/vault/"))
+    assert.equals(
+      "note.md",
+      util.relative_to_vault("/home/user/vault/note.md", "/home/user/vault/")
+    )
   end)
 
   it("does not match partial prefixes", function()
